@@ -59,6 +59,11 @@ def confirm(token):
 
 @auth.before_app_request
 def before_request():
+    """
+    设置一个针对程序全局的钩子函数，使其要求在用户获取权限之前先确认账户。
+    同时满足以下条件时，该函数会拦截用户请求：
+    用户已经登陆但没有确认，且请求的端点不在auth的蓝本中。
+    """
     if current_user.is_authenticated \
         and not current_user.confirmed \
         and request.endpoint[:5] != 'auth.'\
