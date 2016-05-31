@@ -1,5 +1,7 @@
 from werkzeug.security import generate_password_hash, check_password_hash
+from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from flask_login import UserMixin
+from flask import current_app
 from . import db
 from . import login_manager
 
@@ -40,6 +42,33 @@ class User(UserMixin, db.Model):
     def verify_password(self, password):
         return check_password_hash(self.password_hash, password)
     # end password hash
+
+    # account confirm
+    confirmed = db.Column(db.Boolean, default=False)
+
+    def generate_confirmation_token(self, expiration=3600):
+        """
+        # 生成一个令牌，有效期默认是一个小时,
+        令牌是个名值对，名字是confirm，值是根据id生成的。
+        """
+        s = Serializer(current_app.config['SECRET_KEY'], expiration)
+        return s.dumps({'confirm': self.id})
+
+    def confirm(self, token):
+        """
+        确认令牌是否正确。loads出令牌内容，之后解码确认其是否是id值
+        """
+        s = Serializer(current_app.config['SECRET_KEY'])
+        try:
+            data = s.loads(token)
+        except:
+            return False
+        if data.get('confirm') != self.id:
+            return False
+        self.confirmed = True
+        db.session.add(self)
+        return True
+    # end account confirm
 
 
 @login_manager.user_loader
