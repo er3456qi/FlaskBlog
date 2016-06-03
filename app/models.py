@@ -1,7 +1,9 @@
+import hashlib
+from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from flask_login import UserMixin, AnonymousUserMixin
-from flask import current_app
+from flask import current_app, request
 from . import db
 from . import login_manager
 
@@ -59,8 +61,31 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(64), unique=True, index=True)
     role_id = db.Column(db.Integer, db.ForeignKey('roles.id'))
 
+    location = db.Column(db.String(64))
+    about_me = db.Column(db.Text())
+    member_since = db.Column(db.DateTime(), default=datetime.now)  # now 不加括号是因为default参数接受函数作为默认值
+    last_seen = db.Column(db.DateTime(), default=datetime.now)  # 而这样不加括号，会在初始化时调用，时间是字段生成的时间
+
+    def ping(self):
+        """
+        每次收到用户请求时都要调用ping方法以更新时间。
+        """
+        self.last_seen = datetime.now()
+        db.session.add(self)
+
     def __str__(self):
         return '<User {}>'.format(self.username)
+
+    avatar_hash = db.Column(db.String(32))
+
+    def gravatar(self, size=100, default='identicon', rating='g'):
+        url = 'http://en.gravatar.com/avatar'
+        if request.is_secure:
+            url = 'https://secure.gravatar.com/avatar'
+        hash = self.avatar_hash or hashlib.md5(self.email.encode('utf-8')).hexdigest()
+        return '{url}/{hash}?s={size}&d={default}&r={rating}'.format(
+            url=url, hash=hash, size=size, default=default, rating=rating
+        )
 
     def __init__(self, **kwargs):
         """
@@ -74,6 +99,8 @@ class User(UserMixin, db.Model):
                 self.confirmed = True
             if self.role is None:
                 self.role = Role.query.filter_by(default=True).first()
+        if self.email and self.avatar_hash is None:
+            self.avatar_hash = hashlib.md5(self.email.encode('utf-8')).hexdigest()
 
     # role confirm
     def can(self, permissions):

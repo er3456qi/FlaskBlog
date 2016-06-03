@@ -3,6 +3,7 @@ from wtforms import StringField, PasswordField, BooleanField, SubmitField, Valid
 from wtforms.validators import DataRequired, Length, Email, Regexp, EqualTo
 from app.models import User
 
+
 class LoginForm(Form):
     email = StringField('Email', validators=[DataRequired(), Email(), Length(1,64)])
     password = PasswordField('Password', validators=[DataRequired()])
@@ -39,3 +40,12 @@ class RegistrationForm(Form):
         """ validate username to avoid get a username has been used """
         if User.query.filter_by(username=field.data).first():
             raise ValidationError('Username already registered.')
+
+
+class ChangePasswordForm(Form):
+    old_password = PasswordField('Old Password', validators=[DataRequired()])
+    password = PasswordField('New Password', validators=[DataRequired(),
+                                                     EqualTo('re_password',
+                                                             message='Passwords must match')])
+    re_password = PasswordField('Confirm new Password', validators=[DataRequired()])
+    submit = SubmitField('Update Password')

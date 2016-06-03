@@ -3,7 +3,7 @@ from flask_login import login_required, login_user, logout_user, current_user
 from . import auth
 from ..models import User
 from ..email import send_email
-from .forms import LoginForm, RegistrationForm
+from .forms import LoginForm, RegistrationForm, ChangePasswordForm
 from .. import db
 
 
@@ -64,11 +64,10 @@ def before_request():
     同时满足以下条件时，该函数会拦截用户请求：
     用户已经登陆但没有确认，且请求的端点不在auth的蓝本中。
     """
-    if current_user.is_authenticated \
-        and not current_user.confirmed \
-        and request.endpoint[:5] != 'auth.'\
-            and request.endpoint != 'static':
-        return redirect(url_for('auth.unconfirmed'))
+    if current_user.is_authenticated:
+        current_user.ping()  # update time
+        if not current_user.confirmed and request.endpoint[:5] != 'auth.' and request.endpoint != 'static':
+            return redirect(url_for('auth.unconfirmed'))
 
 
 @auth.route('/unconfirmed')
@@ -86,3 +85,18 @@ def resend_confirmation():
                'auth/email/confirm', user=current_user, token=token)
     flash('A new confirmation email has been sent to you by email.')
     return redirect(url_for('main.index'))
+
+
+@auth.route('/change-password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    form = ChangePasswordForm()
+    if form.validate_on_submit():
+        if current_user.verify_password(form.old_password):
+            current_user.password = form.password.data
+            db.session.add(current_user)
+            flash('Your password has been updated')
+            return redirect(url_for('main.index'))
+        else:
+            flash('Wrong Password')
+    return render_template('auth/change_password.html', form=form)

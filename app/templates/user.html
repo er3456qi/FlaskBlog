@@ -1,5 +1,24 @@
 {% extends 'base.html' %}
 
 {% block page_content %}
-    <h1>Hello {{ current_user.username }}</h1>
+<div class="page-header">
+    <img src="{{ user.gravatar(size=256) }}" alt="" class="img-rounded profile-thumbnail">
+    <div class="profile-header">
+        <h1>{{ user.username }}</h1>
+        {% if user.location %}
+        <p>{% if user.location %}From {{ user.location }} {% endif %}</p>
+        {% endif %}
+        {% if user.is_administrator() %}
+            <p><a href="mailto:{{ user.email }}">{{ user.email }}</a></p>
+            <a href="{{ url_for('.settings', id=user.id) }}" class="btn btn-danger">Edit Profile [Admin]</a>
+        {% endif %}
+        {% if user.about_me %}
+            <p>{{ user.about_me }}</p>
+        {% endif %}
+        <p>Member since {{ moment(user.member_since).format('L') }}.</p>
+        <p>Last seen {{ moment(user.last_seen).fromNow() }}</p>
+        <a href="{{ url_for('main.settings') }}">Edit Profile?</a>
+    </div>
+
+</div>
 {% endblock %}
