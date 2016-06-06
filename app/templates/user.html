@@ -20,5 +20,8 @@
         <a href="{{ url_for('main.settings') }}">Edit Profile?</a>
     </div>
 
+    <h2><a href="{{ url_for('main.new_post') }}">New Post</a></h2>
+    <h3>Posts by {{ user.username }}</h3>
+    {% include '_posts.html' %}
 </div>
 {% endblock %}

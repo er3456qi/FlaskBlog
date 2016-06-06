@@ -1,9 +1,11 @@
 import hashlib
+import bleach
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from flask_login import UserMixin, AnonymousUserMixin
 from flask import current_app, request
+from markdown import markdown
 from . import db
 from . import login_manager
 
@@ -54,6 +56,45 @@ class Role(db.Model):
         db.session.commit()
 
 
+class Post(db.Model):
+    __tablename__ = 'posts'
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(64), unique=True)
+    body = db.Column(db.Text)
+    timestamp = db.Column(db.DateTime, index=True, default=datetime.now)
+    author_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    body_html = db.Column(db.Text)
+
+    @staticmethod
+    def on_changed_body(target, value, oldvalue, initiator):
+        allowed_tags = ['a', 'abbr', 'acronym', 'b', 'blockquote', 'code',
+                        'em', 'i', 'li', 'ol', 'pre', 'strong', 'ul',
+                        'h1', 'h2', 'h3', 'p']
+        target.body_html = bleach.linkify(bleach.clean(markdown(value, output_format='html'),
+                                                       tags=allowed_tags, strip=True))
+
+    @staticmethod
+    def generate_fake_post(count=100):
+        from random import seed, randint
+        import forgery_py
+
+        seed()
+        user_count = User.query.count()
+        titles = set()
+        for i in range(count):
+            t = forgery_py.lorem_ipsum.sentence()
+            while t in titles:
+                t = forgery_py.lorem_ipsum.sentence()
+            titles.add(t)
+            u = User.query.offset(randint(0, user_count - 1)).first()
+            p = Post(title=t,
+                     body=forgery_py.lorem_ipsum.sentences(randint(1, 3)),
+                     timestamp=forgery_py.date.date(True),
+                     author=u)
+            db.session.add(p)
+        db.session.commit()
+
+
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
@@ -65,6 +106,34 @@ class User(UserMixin, db.Model):
     about_me = db.Column(db.Text())
     member_since = db.Column(db.DateTime(), default=datetime.now)  # now 不加括号是因为default参数接受函数作为默认值
     last_seen = db.Column(db.DateTime(), default=datetime.now)  # 而这样不加括号，会在初始化时调用，时间是字段生成的时间
+
+    posts = db.relationship('Post', backref='author', lazy='dynamic')
+
+    @staticmethod
+    def generate_fake_user(count=100):
+        from random import seed
+        import forgery_py
+
+        seed()
+        emails, names = set(), set()
+        for i in range(count):
+            m = forgery_py.internet.email_address()
+            while m in emails:
+                m = forgery_py.internet.email_address()
+            emails.add(m)
+            n = forgery_py.internet.user_name()
+            while n in names:
+                n = forgery_py.internet.user_name()
+            names.add(n)
+            u = User(email=m,
+                     username=n,
+                     password=forgery_py.lorem_ipsum.word(),
+                     confirmed=True,
+                     location=forgery_py.address.city(),
+                     about_me=forgery_py.lorem_ipsum.sentence(),
+                     member_since=forgery_py.date.date(True))
+            db.session.add(u)
+        db.session.commit()
 
     def ping(self):
         """
@@ -179,3 +248,11 @@ def load_user(user_id):
     Login_Manager要求实现的一个回调函数，使用指定的标识符家在用户
     """
     return User.query.get(int(user_id))
+
+
+"""
+on_changed_body 函数注册在body字段上，是SQLAlchemy 'set' 事件的监听程序。
+这意味着只要这个类实例的body字段设了新值，函数就会自动被调用。
+on_changed_body 把表单的markdown内容抓换成html存到body_html中。
+"""
+db.event.listen(Post.body, 'set', Post.on_changed_body)

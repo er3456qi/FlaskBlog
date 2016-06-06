@@ -1,9 +1,9 @@
-from flask import render_template, abort, flash, redirect, url_for
-from flask_login import login_required, current_user
+from flask import render_template, abort, flash, redirect, url_for, request
+from flask_login import login_required, current_user, current_app
 
 from . import main
-from ..models import User, Role
-from .forms import EditProfileForm, EditProfileAdminForm
+from ..models import User, Role, Post, Permission
+from .forms import EditProfileForm, EditProfileAdminForm, PostForm
 from app import db
 
 from ..decorators import admin_required
@@ -11,7 +11,11 @@ from ..decorators import admin_required
 
 @main.route('/')
 def index():
-    return render_template('index.html')
+    page = request.args.get('page', 1, type=int)
+    pagination = Post.query.order_by(Post.timestamp.desc()).paginate(
+        page, per_page=current_app.config['BLOG_POSTS_PER_PAGE'])
+    posts = pagination.items
+    return render_template('index.html', posts=posts, pagination=pagination)
 
 
 @main.route('/user/<username>')
@@ -20,7 +24,8 @@ def user(username):
     user = User.query.filter_by(username=username).first()
     if user is None:
         abort(404)
-    return render_template('user.html', user=user)
+    posts = user.posts.order_by(Post.timestamp.desc()).all()
+    return render_template('user.html', user=user, posts=posts)
 
 
 @main.route('/settings', methods=['GET', 'POST'])
@@ -63,3 +68,41 @@ def admin_settings(id):
     form.location.data = user.location
     form.about_me.data = user.about_me
     return render_template('settings.html', form=form, user=user)
+
+
+@main.route('/newpost', methods=['GET', 'POST'])
+@login_required
+def new_post():
+    form = PostForm()
+    if current_user.can(Permission.WRITE_ARTICLES) and form.validate_on_submit():
+        post = Post(title=form.title.data, body=form.body.data, author=current_user._get_current_object())
+        db.session.add(post)
+        print('hello')
+        return redirect(url_for('.index'))
+    else:
+        print('permission', current_user.can(Permission.WRITE_ARTICLES))
+    return render_template('new_post.html', form=form)
+
+
+@main.route('/post/<int:id>')
+def post(id):
+    post = Post.query.get_or_404(id)
+    return render_template('post.html', post=post)
+
+
+@main.route('/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+def edit(id):
+    post = Post.query.get_or_404(id)
+    if current_user != post.author and not current_user.can(Permission.ADMINISTER):
+        abort(403)
+    form = PostForm()
+    if form.validate_on_submit():
+        post.title = form.title.data
+        post.body = form.body.data
+        db.session.add(post)
+        flash('The post has been updated')
+        return redirect(url_for('post', id=post.id))
+    form.title.data = post.title
+    form.body.data = post.body
+    return render_template('edit_post.html', form=form)

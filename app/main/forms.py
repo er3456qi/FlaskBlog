@@ -1,6 +1,8 @@
+from flask_login import current_user
 from flask_wtf import Form
 from wtforms import StringField, TextAreaField, SubmitField, BooleanField, SelectField
 from wtforms.validators import Length, DataRequired, Regexp, ValidationError, Email
+from flask_pagedown.fields import PageDownField
 from .views import User
 from ..models import Role
 
@@ -18,7 +20,7 @@ class EditProfileForm(Form):
 
     def validate_username(self, field):
         """ validate username to avoid get a username has been used """
-        if User.query.filter_by(username=field.data).first():
+        if  current_user.username != field.data and User.query.filter_by(username=field.data).first():
             raise ValidationError('Username already registered.')
 
 
@@ -58,4 +60,9 @@ class EditProfileAdminForm(Form):
             raise ValidationError('Username already registered.')
 
 
-
+class PostForm(Form):
+    title = StringField('Title', validators=[DataRequired()])
+    # body = TextAreaField("What's on your mind?", validators=[DataRequired])
+    # support markdown
+    body = PageDownField("What' s on your mind?", validators=[DataRequired()])
+    submit = SubmitField('Submit')

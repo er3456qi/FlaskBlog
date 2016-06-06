@@ -30,12 +30,13 @@ div.post-date {
 }
 div.post-author {
     font-weight: bold;
+    margin: 0 48px;
 }
 div.post-thumbnail {
     position: absolute;
 }
 div.post-content {
-    margin-left: 48px;
+    margin-top: 48px;
     min-height: 48px;
 }
 div.post-footer {
@@ -92,6 +93,9 @@ div.flask-pagedown-preview h2 {
 }
 div.flask-pagedown-preview h3 {
     font-size: 120%;
+}
+.post-title {
+    font-size: 150%;
 }
 .post-body h1 {
     font-size: 140%;
