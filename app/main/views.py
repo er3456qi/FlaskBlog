@@ -6,11 +6,22 @@ from ..models import User, Role, Post, Permission
 from .forms import EditProfileForm, EditProfileAdminForm, PostForm
 from app import db
 
-from ..decorators import admin_required
+from ..decorators import admin_required, permission_required
 
 
 @main.route('/')
 def index():
+    query = current_user.followed_posts
+    page = request.args.get('page', 1, type=int)
+    pagination = query.order_by(Post.timestamp.desc()).paginate(
+        page, per_page=current_app.config['BLOG_POSTS_PER_PAGE'])
+    posts = pagination.items
+    return render_template('index.html', posts=posts, pagination=pagination)
+
+
+@main.route('/all')
+@login_required
+def show_all():
     page = request.args.get('page', 1, type=int)
     pagination = Post.query.order_by(Post.timestamp.desc()).paginate(
         page, per_page=current_app.config['BLOG_POSTS_PER_PAGE'])
@@ -106,3 +117,75 @@ def edit(id):
     form.title.data = post.title
     form.body.data = post.body
     return render_template('edit_post.html', form=form)
+
+
+@main.route('/follow/<username>')
+@login_required
+@permission_required(Permission.FOLLOW)
+def follow(username):
+    user = User.query.filter_by(username=username).first()
+    if user is None:
+        flash('Invalid user')
+        return redirect(url_for('.index'))
+    if current_user.is_following(user):
+        flash('You have following this user.')
+        return redirect(url_for('.user', username=username))
+    current_user.follow(user)
+    flash('You are now following {}'.format(username))
+    return redirect(url_for('.user', username=username))
+
+
+
+@main.route('/unfollow/<username>')
+@login_required
+def unfollow(username):
+    user = User.query.filter_by(username=username).first()
+    if user is None:
+        flash('Invalid user')
+        return redirect(url_for('.index'))
+    if not current_user.is_following(user):
+        flash('You have not followed this user')
+        return redirect(url_for('.user', username=username))
+    current_user.unfollow(user)
+    flash('You are now unfollowed {}'.format(username))
+    return redirect(url_for('.user', username=username))
+
+
+@main.route('/followers/<username>')
+def followers(username):
+    user = User.query.filter_by(username=username).first()
+    if user is None:
+        flash('Invalid User')
+        return redirect(url_for('.index'))
+    page=request.args.get('page', 1, type=int)
+    pagination = user.followers.paginate(
+        page, per_page=current_app.config['BLOG_FOLLOWERS_PER_PAGE']
+    )
+    follows = [{'user': item.follower, 'timestamp': item.timestamp}
+                 for item in pagination.items]
+    return render_template('followers.html',
+                           user=user,
+                           title='Followers of',
+                           endpoint='.followers',
+                           pagination=pagination,
+                           follows=follows)
+
+
+@main.route('/following/<username>')
+def following(username):
+    user = User.query.filter_by(username=username).first()
+    if user is None:
+        flash('Invalid User')
+        return redirect(url_for('.index'))
+    page=request.args.get('page', 1, type=int)
+    pagination = user.following.paginate(
+        page, per_page=current_app.config['BLOG_FOLLOWERS_PER_PAGE']
+    )
+    follows = [{'user': item.following, 'timestamp': item.timestamp}
+                 for item in pagination.items]
+    return render_template('followers.html',
+                           user=user,
+                           title='Followed by',
+                           endpoint='.following',
+                           pagination=pagination,
+                           follows=follows)

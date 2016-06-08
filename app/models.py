@@ -10,6 +10,13 @@ from . import db
 from . import login_manager
 
 
+class Follow(db.Model):
+    __tablename__ = 'follows'
+    follower_id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
+    following_id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
+    timestamp = db.Column(db.DateTime, default=datetime.now)
+
+
 class Permission():
     FOLLOW = 0x01  # 关注用户
     COMMENT = 0x02  # 发布评论
@@ -108,6 +115,47 @@ class User(UserMixin, db.Model):
     last_seen = db.Column(db.DateTime(), default=datetime.now)  # 而这样不加括号，会在初始化时调用，时间是字段生成的时间
 
     posts = db.relationship('Post', backref='author', lazy='dynamic')
+
+    followers = db.relationship('Follow',
+                                foreign_keys=[Follow.following_id],
+                                backref=db.backref('following', lazy='joined'),
+                                lazy='dynamic',
+                                cascade='all, delete-orphan'
+                                )
+    following = db.relationship('Follow',
+                                foreign_keys=[Follow.follower_id],
+                                backref=db.backref('follower', lazy='joined'),
+                                lazy='dynamic',
+                                cascade='all, delete-orphan'
+                                )
+
+    def follow(self, user):
+        if not self.is_following(user):
+            f = Follow(follower=self, following=user)
+            db.session.add(f)
+
+    def unfollow(self, user):
+        f = self.following.filter_by(following_id=user.id).first()
+        if f:
+            db.session.delete(f)
+
+    def is_following(self, user):
+        return self.following.filter_by(following_id=user.id).first() is not None
+
+    def is_following_by(self, user):
+        return self.followers.filter_by(follower_id=user.id).first() is not None
+
+    @property
+    def followed_posts(self):
+        return Post.query.join(Follow, Follow.following_id==Post.author_id).filter(Follow.follower_id==self.id)
+
+    @staticmethod
+    def add_self_follows():
+        for user in User.query.all():
+            if not user.is_following(user):
+                user.follow(user)
+                db.session.add(user)
+        db.session.commit()
 
     @staticmethod
     def generate_fake_user(count=100):
