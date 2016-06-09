@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 {% endblock %}
 
-{% block title %}Flasky{% endblock %}
+{% block title %}The Blog{% endblock %}
 
 {% block navbar %}
 <div class="nav navbar-inverse" role="navigation">
@@ -20,7 +20,7 @@
                 <span class="icon-bar"></span>
                 <span class="icon-bar"></span>
             </button>
-            <a href="/" class="navbar-brand">Flasky</a>
+            <a href="/" class="navbar-brand">The Blog</a>
         </div>
         <div class="navbar-collapse collapse">
             <ul class="nav navbar-nav">
@@ -34,6 +34,9 @@
                 {% else %}
                 <li><a href="{{ url_for('auth.login') }}">SIGN IN</a></li>
                 <li><a href="{{ url_for('auth.register') }}">REGISTER</a></li>
+                    {% if current_user.can(Permission.MODERATE_COMMENTS) %}
+                    <li><a href="{{ url_for('main.moderate') }}">Moderate Comments</a></li>
+                    {% endif %}
                 {% endif %}
             </ul>
         </div>

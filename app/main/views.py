@@ -2,8 +2,8 @@ from flask import render_template, abort, flash, redirect, url_for, request
 from flask_login import login_required, current_user, current_app
 
 from . import main
-from ..models import User, Role, Post, Permission
-from .forms import EditProfileForm, EditProfileAdminForm, PostForm
+from ..models import User, Role, Post, Permission, Comment
+from .forms import EditProfileForm, EditProfileAdminForm, PostForm, CommentForm
 from app import db
 
 from ..decorators import admin_required, permission_required
@@ -12,6 +12,8 @@ from ..decorators import admin_required, permission_required
 @main.route('/')
 def index():
     query = current_user.followed_posts
+    if query is None:
+        query = Post.query
     page = request.args.get('page', 1, type=int)
     pagination = query.order_by(Post.timestamp.desc()).paginate(
         page, per_page=current_app.config['BLOG_POSTS_PER_PAGE'])
@@ -95,10 +97,22 @@ def new_post():
     return render_template('new_post.html', form=form)
 
 
-@main.route('/post/<int:id>')
+@main.route('/post/<int:id>', methods=['GET', 'POST'])
 def post(id):
     post = Post.query.get_or_404(id)
-    return render_template('post.html', post=post)
+    form = CommentForm()
+    if form.validate_on_submit():
+        comment = Comment(body=form.body.data, post=post, author=current_user._get_current_object())
+        db.session.add(comment)
+        flash('Your comment has been published')
+        return redirect(url_for('.post', id=post.id, page=-1))
+    page = request.args.get('page', 1, type=int)
+    if page == -1:
+        page = (post.comments.count()-1) / current_app.config['BLOG_COMMENTS_PER_PAGE'] + 1
+    pagination = post.comments.order_by(Comment.timestamp.asc()).\
+            paginate(page, per_page=current_app.config['BLOG_COMMENTS_PER_PAGE'])
+    comments = pagination.items
+    return render_template('post.html', post=post, form=form, comments=comments, pagination=pagination)
 
 
 @main.route('/edit/<int:id>', methods=['GET', 'POST'])
@@ -133,7 +147,6 @@ def follow(username):
     current_user.follow(user)
     flash('You are now following {}'.format(username))
     return redirect(url_for('.user', username=username))
-
 
 
 @main.route('/unfollow/<username>')
@@ -189,3 +202,41 @@ def following(username):
                            endpoint='.following',
                            pagination=pagination,
                            follows=follows)
+
+
+@main.route('/moderate')
+@login_required
+@permission_required(Permission.MODERATE_COMMENTS)
+def moderate():
+    page = request.args.get('page', 1, type=int)
+    pagination = Comment.query.order_by(Comment.timestamp.desc())\
+                .paginate(page, per_page=current_app.config['BLOG_FOLLOWERS_PER_PAGE'])
+    comments = pagination.items
+    return render_template('moderate.html', comments=comments, pagination=pagination, page=page)
+
+
+@main.route('/moderate/enable/<int:id>')
+@login_required
+@permission_required(Permission.MODERATE_COMMENTS)
+def moderate_enable(id):
+    comment = Comment.query.get_or_404(id)
+    comment.disabled = False
+    return redirect(url_for('.moderate', page=request.args.get('page', 1, type=int)))
+
+
+@main.route('/moderate/disable/<int:id>')
+@login_required
+@permission_required(Permission.MODERATE_COMMENTS)
+def moderate_disable(id):
+    comment = Comment.query.get_or_404(id)
+    comment.disabled = True
+    return redirect(url_for('.moderate', page=request.args.get('page', 1, type=int)))
+
+
+@main.route('/delete_comment/<id>')
+@login_required
+@permission_required(Permission.MODERATE_COMMENTS)
+def delete_comment(id):
+    comment = Comment.query.get_or_404(id)
+    db.session.remove(comment)
+    redirect(url_for('.index'))

@@ -1,4 +1,6 @@
 {% extends 'base.html' %}
+{% import 'bootstrap/wtf.html' as wtf %}
+{% import "_macros.html" as macros %}
 
 {% block title %}
 The Blog - Post
@@ -35,6 +37,12 @@ The Blog - Post
     <a href="{{ url_for('.edit', id=post.id) }}">
         <span class="label label-primary">Edit</span>
     </a>
+    {% endif %}
+    <h4 id="comments">Comments</h4>
+    <div class="comment-form">{{ wtf.quick_form(form) }}</div>
+    {% include '_comments.html' %}
+    {% if pagination %}
+    <div class="pagination">{{ macros.pagination_widget(pagination, '.post', fragment='#comments', id=post.id) }}</div>
     {% endif %}
 </div>
 {% endblock %}
